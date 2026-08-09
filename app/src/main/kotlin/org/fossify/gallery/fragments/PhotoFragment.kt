@@ -98,7 +98,7 @@ import org.fossify.gallery.extensions.sendFakeClick
 import org.fossify.gallery.helpers.ColorModeHelper
 import org.fossify.gallery.helpers.HIGH_TILE_DPI
 import org.fossify.gallery.helpers.MotionPhotoDataSourceFactory
-import org.fossify.gallery.helpers.MotionPhotoHelper
+import org.fossify.gallery.helpers.MotionPhotoDetector
 import org.fossify.gallery.helpers.MotionPhotoInfo
 import org.fossify.gallery.helpers.LOW_TILE_DPI
 import org.fossify.gallery.helpers.MAX_ZOOM_EQUALITY_TOLERANCE
@@ -283,7 +283,7 @@ class PhotoFragment : ViewPagerFragment() {
         //      checkIfPanorama()
         // }
 
-        if (mMedium.isImage() && (mMedium.name.endsWith(".jpg", true) || mMedium.name.endsWith(".jpeg", true))) {
+        if ((mMedium.isImage() && (mMedium.name.endsWith(".jpg", true) || mMedium.name.endsWith(".jpeg", true))) || mMedium.isHeic()) {
             ensureBackgroundThread {
                 checkIfMotionPhoto()
             }
@@ -898,7 +898,7 @@ class PhotoFragment : ViewPagerFragment() {
 
     private fun checkIfMotionPhoto() {
         val info = try {
-            MotionPhotoHelper.detectMotionPhoto(requireContext(), mMedium.path, mMedium.name)
+            MotionPhotoDetector.detectMotionPhoto(requireContext(), mMedium.path, mMedium.name)
         } catch (e: Exception) {
             null
         }
@@ -953,8 +953,9 @@ class PhotoFragment : ViewPagerFragment() {
             requireContext(), mMedium.path, info.videoOffsetFromStart, info.videoLength
         )
 
+        val uri = if (mMedium.path.startsWith("content:/")) Uri.parse(mMedium.path) else Uri.fromFile(File(mMedium.path))
         val mediaSource = ProgressiveMediaSource.Factory(factory)
-            .createMediaSource(MediaItem.fromUri(Uri.fromFile(File(mMedium.path))))
+            .createMediaSource(MediaItem.fromUri(uri))
 
         val shouldLoop = requireContext().config.loopMotionPhotos
 

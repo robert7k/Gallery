@@ -44,7 +44,7 @@ class MotionPhotoDataSource(
                 ?: throw java.io.FileNotFoundException("Cannot open $filePath")
             parcelFileDescriptor = pfd
             val fis = java.io.FileInputStream(pfd.fileDescriptor)
-            fis.skip(videoOffset + position)
+            fis.channel.position(videoOffset + position)
             inputStream = fis
         } else {
             val raf = RandomAccessFile(File(filePath), "r")

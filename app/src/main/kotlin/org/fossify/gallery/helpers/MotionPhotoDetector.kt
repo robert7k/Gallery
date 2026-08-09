@@ -3,8 +3,7 @@ package org.fossify.gallery.helpers
 import android.content.Context
 import android.net.Uri
 import androidx.core.net.toUri
-import org.apache.sanselan.common.byteSources.ByteSourceInputStream
-import org.apache.sanselan.formats.jpeg.JpegImageParser
+import androidx.exifinterface.media.ExifInterface
 import java.io.File
 import java.io.RandomAccessFile
 
@@ -13,17 +12,19 @@ data class MotionPhotoInfo(
     val videoLength: Long
 )
 
-object MotionPhotoHelper {
+object MotionPhotoDetector {
 
-    private const val SCAN_RANGE = 5L * 1024 * 1024
+    private const val SCAN_RANGE = 15L * 1024 * 1024
     private const val MIN_FILE_SIZE = 12L
     private const val MIN_BOX_SIZE = 8
-    private const val MAX_BOX_SIZE = 64
+    private const val MAX_BOX_SIZE = 256
 
     private val FTYP_MARKER = "ftyp".toByteArray(Charsets.US_ASCII)
 
     fun detectMotionPhoto(context: Context, path: String, name: String): MotionPhotoInfo? {
-        if (!name.endsWith(".jpg", true) && !name.endsWith(".jpeg", true)) {
+        val isSupportedExtension = name.endsWith(".jpg", true) || name.endsWith(".jpeg", true) ||
+            name.endsWith(".heic", true) || name.endsWith(".heif", true)
+        if (!isSupportedExtension) {
             return null
         }
 
@@ -34,8 +35,11 @@ object MotionPhotoHelper {
                 File(path).inputStream()
             }
             inputStream?.use {
-                JpegImageParser().getXmpXml(ByteSourceInputStream(it, name), HashMap<String, Any>())
+                val exif = ExifInterface(it)
+                exif.getAttribute(ExifInterface.TAG_XMP)
             }
+        } catch (_: Exception) {
+            null
         } catch (_: OutOfMemoryError) {
             null
         }
@@ -43,7 +47,10 @@ object MotionPhotoHelper {
         if (xmpXml == null) return null
 
         val isMotionPhoto = xmpXml.contains("GCamera:MotionPhoto=\"1\"", true) ||
-            xmpXml.contains("<GCamera:MotionPhoto>1</GCamera:MotionPhoto>", true)
+            xmpXml.contains("<GCamera:MotionPhoto>1</GCamera:MotionPhoto>", true) ||
+            xmpXml.contains("GCamera:MicroVideo=\"1\"", true) ||
+            xmpXml.contains("<GCamera:MicroVideo>1</GCamera:MicroVideo>", true) ||
+            xmpXml.contains("MotionPhoto=\"1\"", true)
 
         if (!isMotionPhoto) return null
 
@@ -97,17 +104,22 @@ object MotionPhotoHelper {
     }
 
     private fun readBytesFromUri(context: Context, uri: Uri, offset: Long, length: Int): ByteArray? {
-        val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-        return inputStream.use { stream ->
-            stream.skip(offset)
-            val buffer = ByteArray(length)
-            var totalRead = 0
-            while (totalRead < length) {
-                val read = stream.read(buffer, totalRead, length - totalRead)
-                if (read == -1) break
-                totalRead += read
+        return try {
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                java.io.FileInputStream(pfd.fileDescriptor).use { fis ->
+                    fis.channel.position(offset)
+                    val buffer = ByteArray(length)
+                    var totalRead = 0
+                    while (totalRead < length) {
+                        val read = fis.read(buffer, totalRead, length - totalRead)
+                        if (read == -1) break
+                        totalRead += read
+                    }
+                    buffer
+                }
             }
-            buffer
+        } catch (e: Exception) {
+            null
         }
     }
 
